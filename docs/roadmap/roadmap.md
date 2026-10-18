@@ -1,5 +1,5 @@
 # Роадмап: Goo Collect — ИИ-мозг сбора
-Обновлено: 2026-10-17 · Готово: 9 из 11 (82 %) · План: docs/plan/001-ai-brain.md · Макеты: docs/plan/001-ai-brain/mockups/v1.html
+Обновлено: 2026-10-17 · Готово: 10 из 11 (91 %) · План: docs/plan/001-ai-brain.md · Макеты: docs/plan/001-ai-brain/mockups/v1.html
 
 ## Этап A. Сайт понимает ИИ-сбор — сайт умеет выбирать категории и отсеивать вещи по правилу, а агент сам дописывает поля и стиль у вещей из расширения
 
@@ -103,9 +103,9 @@
 - Зависит от: R-05, R-09
 - Готово, когда: PR в Darakhamia/goo-fashion содержит серверную часть и расширение 1.4.0, все проверки зелёные, описание понятно владельцу.
 - Проверка: tsc, ESLint, тесты; CI goo-fashion, если есть.
-- Статус: In Progress
-- Проверено пока: PR Darakhamia/goo-fashion#931 (черновик): extension/ 1.0.12 → 1.4.0 байт в байт, экран Collect и docs/ADMIN.md называют кнопки 1.4.0; tsc 0 ошибок, i18n:check ok, ESLint по extension/ и изменённым файлам чисто; снимки стенда до/после (catalogue-check-ready, parser-collect; обе темы, десктоп и телефон; --overflow — fits).
-- Следующий шаг: дождаться CI в #931 (lint / typecheck / build, migrations apply cleanly).
+- Статус: Done
+- Проверено: PR Darakhamia/goo-fashion#931 готов к вливанию: extension/ 1.0.12 → 1.4.0 байт в байт, экран Collect и docs/ADMIN.md называют кнопки 1.4.0; CI на 291aaf7 зелёный (lint / typecheck / build, migrations apply cleanly), конфликтов нет; tsc 0 ошибок, i18n:check ok, ESLint чисто; снимки стенда до/после (catalogue-check-ready, parser-collect; обе темы, десктоп и телефон; --overflow — fits).
+- Следующий шаг: —
 
 ### R-11 · Влить PR и поднять лимит AI check
 - Зачем: без этого живой сайт работает по-старому, а лимита $5 хватит примерно на 35 000 проверенных вещей в месяц.
