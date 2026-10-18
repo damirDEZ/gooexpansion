@@ -1314,6 +1314,10 @@ async function main() {
         })),
         whole: !document.getElementById("whole").hidden,
         progress: !document.getElementById("progress").hidden,
+        // What is on screen, not only what is marked hidden: an element's own
+        // display once kept the page's rows and Collect this page in view.
+        onScreen: ["rows", "pageActions", "whole", "progress"].filter((id) => getComputedStyle(document.getElementById(id)).display !== "none"),
+        boxWidth: Math.round(document.querySelector("#pickList .item input")?.getBoundingClientRect().width ?? 0),
       })`);
       if (shown) return shown;
     }
@@ -1497,6 +1501,11 @@ async function main() {
         !list.whole && !list.progress,
       JSON.stringify(list),
     );
+    check(
+      "on screen: only the list and its buttons, ticks their own size",
+      !!list && list.onScreen.length === 0 && list.boxWidth > 0 && list.boxWidth <= 24,
+      JSON.stringify(list && { onScreen: list.onScreen, boxWidth: list.boxWidth }),
+    );
     const early = (await storeLog()).log;
     check("not a category was opened before the admin said go", !early.some((l) => l.path.startsWith("/c/")), JSON.stringify(early.filter((l) => l.path.startsWith("/c/")).map((l) => l.path)));
     await popup.evaluate(`document.getElementById("pickGo").click()`, { userGesture: true });
@@ -1576,6 +1585,11 @@ async function main() {
       "the popup shows it as a warning, and says the pieces will not be checked by name",
       !!list && /^AI could not choose \(429 Rate limit/.test(list.note) && /pieces will not be checked by name/.test(list.note),
       list && list.note,
+    );
+    check(
+      "and the line under the buttons says the same, not that AI checks every piece",
+      !!list && list.hint === "Every piece in the ticked categories is opened; the store's sitemaps are not read.",
+      list && list.hint,
     );
     await popup.evaluate(`document.getElementById("pickCancel").click()`);
     await sleep(1500);
