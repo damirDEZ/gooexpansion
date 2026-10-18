@@ -221,6 +221,7 @@
 
 — run W3: the whole store, AI choosing the categories by a rule —
   ok   the run waits on the popup's list: AI's choice, ticked, the rule above it, nothing walked yet
+  ok   on screen: only the list and its buttons, ticks their own size
   ok   not a category was opened before the admin said go
   ok   run W3 finished
   ok   the rule went to the site once, with the menu's four categories (not the page it started on)
@@ -240,6 +241,7 @@
 — run W3b: AI cannot answer, every category is walked —
   ok   every category is ticked, and the run says AI could not choose
   ok   the popup shows it as a warning, and says the pieces will not be checked by name
+  ok   and the line under the buttons says the same, not that AI checks every piece
   ok   Cancel forgets the run: no list, no Resume, the whole store on offer again
   ok   and not a category was walked
 
@@ -277,6 +279,6 @@
   ok   the new worker found the old collect tab and gave it a working bridge
   ok   and the collect screen hears the extension again
 
-  227 passed, 0 failed
+  229 passed, 0 failed
 
 exit=0
