@@ -1096,7 +1096,8 @@
 > Tom Ford, старт с `/`: Men › Ready to wear › Leather jackets…; на 1.5.3 —
 > пусто). Сквозной прогон: W1 и W2 ждут список и без правила, новый W6 —
 > без правила снять Dresses и Kids: обойдены «This page» и три отмеченные,
-> собраны 9 вещей, Dresses/Kids и сайтмап не открывались.
+> собраны 9 вещей, Dresses/Kids и сайтмап не открывались. Весь
+> `run.js` — 245/245.
 
 Здесь три круга работы:
 
@@ -1377,7 +1378,7 @@ node verification/test-site.js                               # 80/80  весь �
 node verification/test-pick-categories.js                    # 29/29  ИИ выбирает категории по правилу (модель подменена)
 node verification/store.js &                                 # фиктивный магазин
 node verification/studio.js &                                # заглушка Студии
-CHROME_PATH=/usr/bin/google-chrome node verification/run.js   # 192/192 сквозной прогон (W–W3b — весь магазин и ИИ, D2 — осторожный темп)
+CHROME_PATH=/usr/bin/google-chrome node verification/run.js   # 245/245 сквозной прогон (W–W6 — весь магазин, список категорий и ИИ, L2 — чужой каталог, D2 — осторожный темп)
 ```
 
 Скомпилированный код сайта подтягивает `openai`, `@supabase/supabase-js`,
