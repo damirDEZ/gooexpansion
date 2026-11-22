@@ -20,7 +20,8 @@
  *
  * And a brand's page with similar designers (1.5.3), where the walk went to
  * them instead of the brand's page two: D–H. I and J are stores whose own
- * pages must still count as theirs: a Bitrix counter, pages in the path.
+ * pages must still count as theirs: a Bitrix counter, pages in the path. K
+ * is a "Next page" that redraws itself on the last page: pressed once.
  */
 const path = require("path");
 const { pathToFileURL } = require("url");
@@ -182,6 +183,24 @@ const pathPager = `<!doctype html><html><head><meta charset="utf-8"><link rel="n
 <main><ul>${Array.from({ length: 6 }, (_, i) => card("shoe", i + 1)).join("")}</ul></main>
 <footer><a href="/help">Help</a></footer></body></html>`;
 
+// K. A last page whose "Next page" is only greyed out by a class: pressing it
+// redraws the pager (a new button) and pages nothing.
+const redrawnNext = `<!doctype html><html><head><meta charset="utf-8">${css}</head><body>
+<main>
+  <ul>${Array.from({ length: 6 }, (_, i) => card("gucci", i + 1)).join("")}</ul>
+  <div class="ltr-9z8y" id="pager"></div>
+</main>
+<footer><a href="/help">Help</a></footer>
+<script>
+  window.__presses = 0;
+  const draw = () => {
+    const pager = document.getElementById("pager");
+    pager.innerHTML = '<span>2 / 2</span> <button type="button" class="next is-off" aria-label="Next page"><svg></svg></button>';
+    pager.querySelector("button").addEventListener("click", () => { window.__presses++; setTimeout(draw, 50); });
+  };
+  draw();
+</script></body></html>`;
+
 (async () => {
   const { listingStep, sameListing = () => null } = await import(pathToFileURL(path.join(__dirname, "..", "extension", "listing.js")).href);
   const playwright = (() => {
@@ -296,6 +315,11 @@ const pathPager = `<!doctype html><html><head><meta charset="utf-8"><link rel="n
     console.log("— I. a Bitrix store's page two: ?PAGEN_1, \"Вперед\" —");
     const i9 = await walk(bitrix, bitrixStart);
     check("page three is its next page", [i9.exhausted, i9.next], [true, "/catalog/obuv/?PAGEN_1=3"]);
+
+    console.log("— K. a \"Next page\" that redraws itself and pages nothing —");
+    const k = await walk(redrawnNext, brand);
+    const presses = await page.evaluate(() => window.__presses);
+    check("it is pressed once, and the walk ends there", [presses, k.clicked, k.exhausted], [1, ["Next page"], true]);
 
     console.log("— J. pages in the path (/page-2/), in rel=next —");
     const j = await walk(pathPager, pathStart);
