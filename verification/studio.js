@@ -39,8 +39,9 @@ const { pickPieces, readPieceQuestion } = require(path.join(PARSER, "pick-pieces
  * around it — what the request carries, how the answer is read — is the
  * shipping `pick-categories.ts` and `pick-pieces.ts`.
  *
- * Categories: kept when a word of the label is a word of the rule; a broad
- * one ("New in", "Sale") is mixed; the rest dropped. Pieces: kept when a word
+ * Categories: kept when a word of the category's own name (its label after
+ * the last "›", the menu's folders before it being context) is a word of the
+ * rule; a broad one ("New in", "Sale") is mixed; the rest dropped. Pieces: kept when a word
  * of the name or the path is one the rule names, a word of the same family
  * counting ("shoes" is a boot, a sneaker, a loafer, a sandal), the rule's
  * small words and genders aside. A rule with FAIL in it fails every call, as
@@ -68,11 +69,12 @@ const STAND_IN_MODEL = {
         for (const m of text.matchAll(/^(\d+)\. (".*") (\S+)$/gm)) {
           const label = JSON.parse(m[2]).toLowerCase();
           const n = Number(m[1]);
+          const own = label.split("›").pop().trim();
           if (pieces) {
             const seen = `${label} ${m[3].toLowerCase()}`.split(/[^a-z]+/).map(stem);
             (seen.some((w) => stems.has(w)) ? keep : drop).push(n);
-          } else if (label.split(/[^a-z]+/).some((w) => words.has(w))) keep.push(n);
-          else if (BROAD.has(label)) mixed.push(n);
+          } else if (own.split(/[^a-z]+/).some((w) => words.has(w))) keep.push(n);
+          else if (BROAD.has(own)) mixed.push(n);
           else drop.push(n);
         }
         return {
@@ -294,6 +296,7 @@ const server = http.createServer(async (req, res) => {
       finalUrl: body.finalUrl,
       categoryRule: body.categoryRule,
       categories: Array.isArray(body.categories) ? body.categories.map((c) => c && c.url) : undefined,
+      categoryLabels: Array.isArray(body.categories) ? body.categories.map((c) => c && c.label) : undefined,
       pieceRule: body.pieceRule,
       pieces: Array.isArray(body.pieces) ? body.pieces.map((x) => [x && x.url, x && x.name]) : undefined,
     });
