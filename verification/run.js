@@ -1302,16 +1302,26 @@ async function main() {
       const shown = await p.evaluate(`document.getElementById("pick").hidden ? null : ({
         found: document.getElementById("pickFound").textContent,
         rule: document.getElementById("pickRule").textContent,
-        taking: document.getElementById("showTaking").textContent,
-        skipped: document.getElementById("showSkipped").textContent,
+        ticked: document.getElementById("pickTicked").textContent,
         go: document.getElementById("pickGo").textContent,
         hint: document.getElementById("pickHint").textContent,
         note: document.getElementById("note").hidden ? "" : document.getElementById("note").textContent,
-        rows: [...document.querySelectorAll("#pickList .item")].map((r) => ({
+        // Every category of the tree, open folders or shut, in the menu's order.
+        rows: [...document.querySelectorAll("#pickList .leaf")].map((r) => ({
           label: r.querySelector(".name").firstChild.textContent,
           on: r.querySelector("input").checked,
           tag: r.querySelector(".tag").textContent,
         })),
+        folders: [...document.querySelectorAll("#pickList .folder")].map((f) => {
+          const box = f.querySelector(":scope > .row input");
+          return {
+            name: f.querySelector(":scope > .row .name").textContent,
+            count: f.querySelector(":scope > .row .count").textContent,
+            tick: box.indeterminate ? "part" : box.checked ? "all" : "none",
+            open: f.getAttribute("aria-expanded") === "true",
+          };
+        }),
+        settings: !document.getElementById("rows").hidden && getComputedStyle(document.getElementById("rows")).display !== "none",
         whole: !document.getElementById("whole").hidden,
         progress: !document.getElementById("progress").hidden,
       })`);
@@ -1492,11 +1502,39 @@ async function main() {
     check(
       "the run waits on the popup's list: AI's choice, ticked, the rule above it, nothing walked yet",
       !!list && list.found === "AI picked 2 of the menu's 4 categories" && list.rule === "Rule: «Coats and sale only»" &&
-        list.taking === "Taking 2" && list.skipped === "Show skipped 2" && list.go === "Collect 2 categories" &&
-        JSON.stringify(list.rows) === JSON.stringify([{ label: "Coats", on: true, tag: "" }, { label: "Sale", on: true, tag: "" }]) &&
-        !list.whole && !list.progress,
+        list.ticked === "2 of 4 ticked" && list.go === "Collect 2 categories" &&
+        JSON.stringify(list.rows) ===
+          JSON.stringify([
+            { label: "Coats", on: true, tag: "" },
+            { label: "Knitwear", on: false, tag: "" },
+            { label: "Sale", on: true, tag: "" },
+            { label: "The coat of the season", on: false, tag: "" },
+          ]) &&
+        !list.whole && !list.progress && !list.settings,
       JSON.stringify(list),
     );
+    check(
+      "as folders: the menu's hidden panel after Sale is Sale's, its tick a dash for one of two, open in a list this small",
+      !!list && JSON.stringify(list.folders) === JSON.stringify([{ name: "Sale", count: "1/2", tick: "part", open: true }]),
+      JSON.stringify(list && list.folders),
+    );
+    // A folder's tick is the tick of all it holds, and it goes back as it was.
+    const sale = `[...document.querySelectorAll("#pickList .folder")].find((f) => f.querySelector(".name").textContent === "Sale").querySelector("input")`;
+    await popup.evaluate(`${sale}.click()`);
+    await sleep(300);
+    const allSale = await pickShown(popup);
+    await popup.evaluate(`${sale}.click()`);
+    await sleep(300);
+    const noSale = await pickShown(popup);
+    check(
+      "one click on the folder ticks all in it, the next unticks all",
+      allSale.go === "Collect 3 categories" && allSale.folders[0].tick === "all" && allSale.rows[3].on &&
+        noSale.go === "Collect 1 category" && noSale.folders[0].tick === "none" && !noSale.rows[2].on && !noSale.rows[3].on,
+      JSON.stringify({ allSale, noSale }),
+    );
+    await popup.evaluate(`[...document.querySelectorAll("#pickList .leaf")].find((r) => /^Sale/.test(r.textContent)).querySelector("input").click()`);
+    await sleep(300);
+    check("ticked back by hand: AI's choice again", (await pickShown(popup)).go === "Collect 2 categories");
     const early = (await storeLog()).log;
     check("not a category was opened before the admin said go", !early.some((l) => l.path.startsWith("/c/")), JSON.stringify(early.filter((l) => l.path.startsWith("/c/")).map((l) => l.path)));
     await popup.evaluate(`document.getElementById("pickGo").click()`, { userGesture: true });
@@ -1512,6 +1550,11 @@ async function main() {
       asked.length === 1 && asked[0].categoryRule === "Coats and sale only" &&
         JSON.stringify(asked[0].categories.map((u) => u.replace(STORE, ""))) === JSON.stringify(["/c/coats", "/c/knitwear", "/c/sale", "/product/feature-coat"]),
       JSON.stringify(asked),
+    );
+    check(
+      "each named with the folders it sits in, so AI reads whose it is",
+      asked.length === 1 && JSON.stringify(asked[0].categoryLabels) === JSON.stringify(["Coats", "Knitwear", "Sale", "Sale › The coat of the season"]),
+      JSON.stringify(asked[0] && asked[0].categoryLabels),
     );
     const saved = await popup.evaluate("chrome.storage.local.get('siteRun').then((s) => s.siteRun)");
     check(
@@ -1568,7 +1611,7 @@ async function main() {
     check(
       "every category is ticked, and the run says AI could not choose",
       !!saved && saved.stage === "pick" && saved.categories.length === 5 && saved.rule === "" && /AI could not choose the categories \(429 Rate limit/.test(saved.aiNote) &&
-        !!list && list.found === "All 4 of the menu's categories" && list.taking === "Taking 4" && list.skipped === "Show skipped 0" &&
+        !!list && list.found === "All 4 of the menu's categories" && list.ticked === "4 of 4 ticked" &&
         list.rows.length === 4 && list.rows.every((r) => r.on),
       JSON.stringify({ list, saved: saved && { stage: saved.stage, n: saved.categories.length, rule: saved.rule, note: saved.aiNote } }),
     );
@@ -1638,8 +1681,8 @@ async function main() {
       async (list) => {
         check(
           "the list: AI took the two shoe categories and New in, marked mixed",
-          !!list && list.found === "AI picked 3 of the menu's 5 categories" && list.taking === "Taking 3" && list.skipped === "Show skipped 2" &&
-            JSON.stringify(list.rows) ===
+          !!list && list.found === "AI picked 3 of the menu's 5 categories" && list.ticked === "3 of 5 ticked" &&
+            JSON.stringify(list.rows.filter((r) => r.on)) ===
               JSON.stringify([
                 { label: "Women's shoes", on: true, tag: "" },
                 { label: "Men's shoes", on: true, tag: "" },
@@ -1648,14 +1691,13 @@ async function main() {
             list.go === "Collect 3 categories",
           JSON.stringify(list),
         );
-        await popup.evaluate(`document.getElementById("showSkipped").click()`);
-        const skippedRows = (await pickShown(popup)).rows;
         check(
-          "Show skipped: what AI left out, unticked",
-          JSON.stringify(skippedRows) === JSON.stringify([{ label: "Dresses", on: false, tag: "" }, { label: "Kids", on: false, tag: "" }]),
-          JSON.stringify(skippedRows),
+          "and what AI left out stands in the same list, in the menu's order, unticked",
+          JSON.stringify(list.rows.map((r) => [r.label, r.on])) ===
+            JSON.stringify([["Women's shoes", true], ["Men's shoes", true], ["Dresses", false], ["Kids", false], ["New in", true]]) && !list.folders.length,
+          JSON.stringify(list.rows),
         );
-        await popup.evaluate(`[...document.querySelectorAll("#pickList .item")].find((r) => /^Kids/.test(r.textContent)).querySelector("input").click()`);
+        await popup.evaluate(`[...document.querySelectorAll("#pickList .leaf")].find((r) => /^Kids/.test(r.textContent)).querySelector("input").click()`);
         await sleep(400);
         const ticked = await pickShown(popup);
         check("a tick by hand counts: Collect 4 categories", ticked.go === "Collect 4 categories" && ticked.hint === "You ticked Kids yourself: 4 categories now.", JSON.stringify(ticked));
@@ -1663,8 +1705,7 @@ async function main() {
         popup.close();
         popup = await popupOver(HOME);
         const again = await pickShown(popup);
-        await popup.evaluate(`document.getElementById("showSkipped").click()`);
-        const againRows = (await pickShown(popup)).rows;
+        const againRows = again ? again.rows : [];
         check(
           "a popup closed and opened again finds the list, Kids still ticked",
           !!again && again.go === "Collect 4 categories" && againRows.some((r) => r.label === "Kids" && r.on),
