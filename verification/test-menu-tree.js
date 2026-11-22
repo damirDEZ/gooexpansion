@@ -291,7 +291,8 @@ const S = "https://shop.example";
       await page.goto(`${S}/`);
       await page.unroute(`${S}/**`);
       const t0 = Date.now();
-      const res = await page.evaluate(`(${menuStep.toString()})()`);
+      // The page as it stands: the reading itself. Opening the menu has its own check below.
+      const res = await page.evaluate(`(${menuStep.toString()})({ open: false })`);
       return { links: res.links, ms: Date.now() - t0 };
     };
     const trails = (links) => links.map((l) => `${l.trail.join(" › ")}${l.trail.length ? " | " : ""}${l.label}`);
@@ -498,6 +499,81 @@ const S = "https://shop.example";
       ],
     );
 
+    console.log("— a menu whose panels are in the page only while it is open —");
+    // Burberry (Base UI's navigation menu): the panels go the first time the
+    // pointer has been over the menu and left. Pointed at, a tab puts every
+    // panel back, hidden inside its own tab, and shows its own in a box apart
+    // from all of them. "Kids" is a button that opens only on a click. The
+    // admin had looked at the menu before pressing Collect: seven categories,
+    // no folder.
+    const live = `<!doctype html><html><head><meta charset="utf-8"><style>.hide{display:none}</style></head><body>
+      <header><nav><ul id="bar">
+        <li><a href="/c/women/" role="button" aria-expanded="false" data-tab="women">Women</a><div class="panel" data-for="women"></div></li>
+        <li><a href="/c/men/" role="button" aria-expanded="false" data-tab="men">Men</a><div class="panel" data-for="men"></div></li>
+        <li><button type="button" aria-expanded="false" id="kids">Kids</button><div class="panel" data-for="kids"></div></li>
+        <li><a href="/c/bags/" role="button" aria-expanded="false" data-tab="bags">Bags</a><div class="panel" data-for="bags"></div></li>
+      </ul><div id="viewport"></div></nav></header><main><h1>Home</h1></main>
+      <script>
+        const content = {
+          women: '<ul class="cols"><li class="cat"><ul><li><a href="/l/womens-clothing/"><span class="h">Clothes</span></a></li><li><a href="/l/womens-clothing/dresses/"><span class="i">Dresses</span></a></li><li><a href="/l/womens-clothing/tops/"><span class="i">Tops</span></a></li></ul></li><li class="cat"><ul><li><a href="/l/womens-bags/"><span class="h">Bags</span></a></li><li><a href="/l/womens-bags/totes/"><span class="i">Totes</span></a></li><li><a href="/l/womens-bags/clutch/"><span class="i">Clutches</span></a></li></ul></li></ul>',
+          men: '<ul class="cols"><li class="cat"><ul><li><a href="/l/mens-clothing/"><span class="h">Clothes</span></a></li><li><a href="/l/mens-clothing/polos/"><span class="i">Polos</span></a></li><li><a href="/l/mens-clothing/shirts/"><span class="i">Shirts</span></a></li></ul></li></ul>',
+          kids: '<ul><li><a href="/l/kids/boys/">Boys</a></li><li><a href="/l/kids/girls/">Girls</a></li></ul>',
+          bags: '<ul><li><a href="/l/bags/collections/">Collections</a></li><li><a href="/l/bags/new/">New bags</a></li></ul>',
+        };
+        const open = (key) => {
+          for (const p of document.querySelectorAll(".panel")) { p.innerHTML = '<div class="hide">' + content[p.dataset.for] + "</div>"; }
+          document.getElementById("viewport").innerHTML = '<div class="col">' + content[key] + "</div>";
+        };
+        const close = () => { for (const p of document.querySelectorAll(".panel")) p.innerHTML = ""; document.getElementById("viewport").innerHTML = ""; };
+        for (const a of document.querySelectorAll("[data-tab]")) {
+          a.addEventListener("mouseover", () => open(a.dataset.tab));
+          a.addEventListener("mouseout", close);
+          a.addEventListener("click", (e) => { window.__clicked = (window.__clicked || 0) + 1; });
+        }
+        document.getElementById("kids").addEventListener("click", (e) => {
+          const b = e.currentTarget;
+          if (b.getAttribute("aria-expanded") === "false") { b.setAttribute("aria-expanded", "true"); document.getElementById("viewport").innerHTML = content.kids; }
+          else { b.setAttribute("aria-expanded", "false"); close(); }
+        });
+      </script></body></html>`;
+    await page.route(`${S}/**`, (route) => route.fulfill({ status: 200, contentType: "text/html; charset=utf-8", body: live }));
+    await page.goto(`${S}/`);
+    await page.unroute(`${S}/**`);
+    const asIs = await page.evaluate(`(${menuStep.toString()})({ open: false })`);
+    check("read as the admin left it: the menu bar alone", trails(asIs.links), ["Women", "Men", "Bags"]);
+    const opened = await page.evaluate(`(${menuStep.toString()})()`);
+    check("opened item by item: each panel's links under their tab and column, whatever box the page shows them in", trails(opened.links), [
+      "Women",
+      "Men",
+      "Bags",
+      "Women | Clothes",
+      "Women › Clothes | Dresses",
+      "Women › Clothes | Tops",
+      "Women | Bags",
+      "Women › Bags | Totes",
+      "Women › Bags | Clutches",
+      "Men | Clothes",
+      "Men › Clothes | Polos",
+      "Men › Clothes | Shirts",
+      "Kids | Boys",
+      "Kids | Girls",
+      "Bags | Collections",
+      "Bags | New bags",
+    ]);
+    const after = await page.evaluate(() => ({
+      url: location.pathname,
+      clicked: window.__clicked || 0,
+      panels: document.querySelectorAll(".panel a, #viewport a").length,
+      kids: document.getElementById("kids").getAttribute("aria-expanded"),
+    }));
+    check("no link was clicked, the tab stayed where it was, and the menu is shut again", after, { url: "/", clicked: 0, panels: 0, kids: "false" });
+    const openedTree = menuGroups(categoryCandidates(opened.links, `${S}/`)).map((c) => categoryName(c));
+    check(
+      "and as folders: Women's Bags in Women, not in the Bags tab",
+      openedTree.includes("Women › Bags › Totes") && openedTree.includes("Bags › Collections") && !openedTree.includes("Bags › Totes"),
+      true,
+    );
+
     console.log("— a big menu, read quickly —");
     const huge = [];
     for (let t = 0; t < 12; t++) {
@@ -512,6 +588,14 @@ const S = "https://shop.example";
     // counted afresh per item, it took minutes.
     const wp = Array.from({ length: 5000 }, (_, k) => `<li id="menu-item-${k}" class="menu-item menu-item-${k}"><a href="/product-category/brand-${k}/">Brand ${k}</a></li>`).join("");
     const f = await read(page$(`<header><nav><ul class="menu">${wp}</ul></nav></header>`));
+    // And opened: nothing in it opens anything, so the few items tried cost little.
+    await page.route(`${S}/**`, (route) => route.fulfill({ status: 200, contentType: "text/html; charset=utf-8", body: page$(`<header><nav><ul class="menu">${wp}</ul></nav></header>`) }));
+    await page.goto(`${S}/`);
+    await page.unroute(`${S}/**`);
+    const t1 = Date.now();
+    const fo = await page.evaluate(`(${menuStep.toString()})()`);
+    const openMs = Date.now() - t1;
+    check(`five thousand flat items, opened item by item, in under ten seconds (${openMs} ms)`, [fo.links.length, openMs < 10_000], [5000, true]);
     check(`five thousand flat items, each with its own class, in under two seconds (${f.ms} ms)`, [f.links.length, f.links.every((l) => !l.trail.length), f.ms < 2000], [5000, true, true]);
     await browser.close();
   }
