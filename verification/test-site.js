@@ -102,6 +102,43 @@ const S = "https://shop.example";
   check("country and language: the same pair", site.categoryAddress("/ua/en/man-jackets-l640.html", zara), `${S}/ua/en/man-jackets-l640.html`);
   check("country and language: not the same country in another", site.categoryAddress("/ua/uk/man-jackets-l640.html", zara), "");
 
+  // A home on the bare domain whose menu lives under one language (Tom Ford,
+  // 2026-11-22: tomfordfashion.com, every menu link under /en-us/). Kept to
+  // the start page's "no language", the run found no category at all.
+  const bare = `${S}/`;
+  const tomFord = [
+    { url: `${S}/en-us/men/`, label: "Men", where: "menu" },
+    { url: `${S}/en-us/women/`, label: "Women", where: "menu" },
+    { url: `${S}/en-us/men/ready-to-wear/leather-jackets/`, label: "Leather jackets", where: "menu", trail: ["Men", "Ready to wear"] },
+    { url: `${S}/en-us/men/shoes/sneakers/`, label: "Sneakers", where: "menu", trail: ["Men", "Shoes"] },
+    { url: `${S}/en-us/gifts/`, label: "Gifts", where: "menu" },
+    { url: `${S}/en-us/customer-service/`, label: "Customer service", where: "footer" },
+    { url: `${S}/en-gb/`, label: "United Kingdom", where: "footer" },
+    { url: `${S}/it-it/`, label: "Italia", where: "footer" },
+  ];
+  check("a bare-domain home takes the language its menu speaks", site.storeLocale(tomFord, bare), "/en-us");
+  check(
+    "and its menu's categories are the run's, not the other countries in the footer",
+    site.categoryCandidates(tomFord, bare).map((c) => c.url.replace(S, "")),
+    ["/en-us/men/", "/en-us/women/", "/en-us/men/ready-to-wear/leather-jackets/", "/en-us/men/shoes/sneakers/", "/en-us/gifts/"],
+  );
+  check(
+    "a start page that names its language keeps to it",
+    [site.storeLocale(tomFord, `${S}/en-gb/`), site.categoryCandidates(tomFord, `${S}/en-gb/`).length],
+    ["/en-gb", 0],
+  );
+  check(
+    "a store without languages in its menu stays without, whatever its footer offers",
+    site.storeLocale([{ url: `${S}/c/coats`, where: "menu" }, { url: `${S}/c/knits`, where: "menu" }, { url: `${S}/fr/`, where: "footer" }], bare),
+    "",
+  );
+  check(
+    "with no menu, the page's own links say it",
+    site.storeLocale([{ url: `${S}/en-us/c/coats`, where: "page" }, { url: `${S}/en-us/c/knits`, where: "page" }], bare),
+    "/en-us",
+  );
+  check("a link's language as asked for", site.categoryAddress("/en-us/men/", bare, "/en-us"), `${S}/en-us/men/`);
+
   // ── The menu as a list of categories ───────────────────────────────────────
   const links = [
     { url: `${S}/`, label: "Home", where: "menu" },

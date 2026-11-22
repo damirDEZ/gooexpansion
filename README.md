@@ -1064,6 +1064,30 @@
 > бренда — кнопка, чей скрипт уводит вкладку в Coats; собраны ровно шесть
 > вещей бренда, вкладка снова на бренде.
 
+> **Меню под языком и список без правила: расширение 1.5.4** (2026-11-22).
+> Tom Ford, начатый с главной `tomfordfashion.com`: «category 1 of 1» —
+> из меню не взято ни одной категории. Адрес главной языка не называет, а
+> всё меню — под `/en-us/`; прогон держится языка страницы, с которой
+> начат, и выкидывал всё меню как «другой язык». Теперь:
+> - **язык прогона** (`storeLocale`, `site.js`) — язык стартовой страницы,
+>   а если в её адресе языка нет, тот, что называет большинство ссылок меню
+>   (и только если таких больше, чем ссылок без языка: магазин без языков
+>   с парой стран в подвале остаётся без языка);
+> - **список категорий всегда** — и без правила в «What to collect»: меню
+>   папками, всё отмечено, ничего не обходится до **Collect N
+>   categories**. Админ спросил, обязательно ли правило: нет, а со списком
+>   лишнее снимается руками. Если без правила что-то снято, сайтмапы не
+>   читаются (весь магазин вернул бы снятое) — об этом говорит подсказка
+>   под списком. Меню без категорий видно в строке прогона: «the store's
+>   menu offered no categories».
+>
+> Тесты: `test-site.js` 79/79 (язык меню при голом домене, магазин без
+> языков, страница без меню), `test-menu-tree.js` 44/44 (мега-меню в духе
+> Tom Ford, старт с `/`: Men › Ready to wear › Leather jackets…; на 1.5.3 —
+> пусто). Сквозной прогон: W1 и W2 ждут список и без правила, новый W6 —
+> без правила снять Dresses и Kids: обойдены «This page» и три отмеченные,
+> собраны 9 вещей, Dresses/Kids и сайтмап не открывались.
+
 Здесь три круга работы:
 
 1. **Сбор** — расширение, приёмник, план по robots.txt и сайтмапам, вежливый темп.
@@ -1334,12 +1358,12 @@ node verification/test-sitemap-pieces.js                     # 33/33  больш
 node verification/test-listing.js                            # 45/45  «Collect this page»: robots.txt и план
 node verification/test-goat-listing.js                       # 53/53  только сетка страницы: GOAT, ASICS, без меню и подвала
 node verification/test-pages.js                              # 24/24  страницы этого каталога, а не полки и не «похожие»: Farfetch
-node verification/test-menu-tree.js                          # 43/43  категории папками: Burberry, Kith, END., Nike, About You, Dawn, WordPress, Bootstrap, меню только открытым
+node verification/test-menu-tree.js                          # 44/44  категории папками: Burberry, Kith, END., Nike, About You, Dawn, WordPress, Bootstrap, меню только открытым
 node verification/test-brand.js                              # 44/44  бренд: GOAT, модели, список Brands
 node verification/test-ssense.js                             # 53/53  SSENSE: шаблон главного фото, кадры Cloudinary, чужие коды
 node verification/test-ssense-import.js                      # 15/15  главное фото при импорте, «duplicate key»
 node verification/test-no-main-photo.js                      # 29/29  нет фото вещи — нет карточки (GOAT), AI не ставит чужое фото
-node verification/test-site.js                               # 73/73  весь магазин: меню → категории, язык, все сайтмапы
+node verification/test-site.js                               # 79/79  весь магазин: меню → категории, язык, все сайтмапы
 node verification/test-pick-categories.js                    # 29/29  ИИ выбирает категории по правилу (модель подменена)
 node verification/store.js &                                 # фиктивный магазин
 node verification/studio.js &                                # заглушка Студии
