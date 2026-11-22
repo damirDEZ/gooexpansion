@@ -17,6 +17,10 @@
  *   C. what must keep working: a grid whose own "Show more" comes before its
  *      pages (it fills this page, the pages go on from it), under a hero
  *      slider whose "›" pages nothing.
+ *
+ * And a brand's page with similar designers (1.5.3), where the walk went to
+ * them instead of the brand's page two: D–H. I and J are stores whose own
+ * pages must still count as theirs: a Bitrix counter, pages in the path.
  */
 const path = require("path");
 const { pathToFileURL } = require("url");
@@ -130,8 +134,56 @@ const foreignNext = `<!doctype html><html><head><meta charset="utf-8">${css}</he
   });
 </script></body></html>`;
 
+// F. The same "See more" as in D, but a button inside the link (Next.js
+// renders <Link><Button/></Link> so).
+const wrappedSeeMore = similarFirst.replace(
+  '<a class="ltr-66" href="/uk/shopping/men/designers/items.aspx">See more</a>',
+  '<a class="ltr-66" href="/uk/shopping/men/designers/items.aspx"><button class="ltr-67" type="button">See more</button></a>',
+);
+
+// G. E's slider has a "Next" button of its own, before the brand's "Next
+// page": pressing it pages nothing of the listing.
+const sliderArrow = foreignNext.replace(
+  '<a class="ltr-q" aria-label="Next" href="/uk/shopping/men/prada/items.aspx?page=2">›</a>',
+  '<button class="ltr-q" type="button" aria-label="Next">›</button>',
+);
+
+// H. An app store: "Show more" is a button whose router takes the tab to the
+// similar designers in place, without loading a page.
+const routerAway = `<!doctype html><html><head><meta charset="utf-8">${css}</head><body>
+<header><nav><a href="/uk/shopping/men/items.aspx">Men</a></nav></header>
+<main>
+  <h1>Gucci</h1>
+  <ul id="grid">${Array.from({ length: 6 }, (_, i) => card("gucci", i + 1)).join("")}</ul>
+  <button type="button" id="more" class="ltr-m">Show more</button>
+</main>
+<footer><a href="/help">Help</a></footer>
+<script>
+  document.getElementById("more").addEventListener("click", () => {
+    history.pushState({}, "", "/uk/shopping/men/designers/items.aspx");
+    document.getElementById("grid").innerHTML = ${JSON.stringify(Array.from({ length: 6 }, (_, i) => card("prada", i + 1)).join(""))};
+  });
+</script></body></html>`;
+
+// I. A 1C-Bitrix store on page two: its counter is PAGEN_1, its "Next" says
+// "Вперед".
+const bitrixStart = `${S}/catalog/obuv/?PAGEN_1=2`;
+const bitrix = `<!doctype html><html><head><meta charset="utf-8">${css}</head><body>
+<main>
+  <ul>${Array.from({ length: 6 }, (_, i) => card("boot", i + 1)).join("")}</ul>
+  <div class="bx-pagination"><a href="/catalog/obuv/?PAGEN_1=1">1</a> <span>2</span> <a href="/catalog/obuv/?PAGEN_1=3">3</a>
+    <a href="/catalog/obuv/?PAGEN_1=3">Вперед</a></div>
+</main>
+<footer><a href="/help">Help</a></footer></body></html>`;
+
+// J. A store that pages in the path (`/page-2/`) and says so in rel=next.
+const pathStart = `${S}/catalog/shoes/page-2/`;
+const pathPager = `<!doctype html><html><head><meta charset="utf-8"><link rel="next" href="/catalog/shoes/page-3/">${css}</head><body>
+<main><ul>${Array.from({ length: 6 }, (_, i) => card("shoe", i + 1)).join("")}</ul></main>
+<footer><a href="/help">Help</a></footer></body></html>`;
+
 (async () => {
-  const { listingStep } = await import(pathToFileURL(path.join(__dirname, "..", "extension", "listing.js")).href);
+  const { listingStep, sameListing = () => null } = await import(pathToFileURL(path.join(__dirname, "..", "extension", "listing.js")).href);
   const playwright = (() => {
     try {
       return require(process.env.PLAYWRIGHT_MODULE || "playwright");
@@ -161,12 +213,18 @@ const foreignNext = `<!doctype html><html><head><meta charset="utf-8">${css}</he
       const clicked = [];
       let res = null;
       let error = "";
+      let left = false;
       for (let i = 0; i < 40; i++) {
         const opts = { first: i === 0, reset: i === 0, stepMs: 60, settleMs: 400, clickWaitMs: 900 };
         try {
           res = await page.evaluate(`(${listingStep.toString()})(${JSON.stringify(opts)})`);
         } catch (err) {
           error = String(err.message || err).split("\n")[0];
+          break;
+        }
+        // As the worker does: a step on another listing is not read.
+        if (sameListing(start, res.url) === false) {
+          left = true;
           break;
         }
         links.push(...res.links.map((u) => new URL(u).pathname));
@@ -185,6 +243,7 @@ const foreignNext = `<!doctype html><html><head><meta charset="utf-8">${css}</he
         at: new URL(page.url()).pathname,
         away: served.slice(1),
         error,
+        left,
       };
     };
     const pieces = (links) => links.filter((p) => /-item-\d+\.aspx$/.test(p));
@@ -219,12 +278,33 @@ const foreignNext = `<!doctype html><html><head><meta charset="utf-8">${css}</he
     const e = await walk(foreignNext, brand);
     check("the other listing's \"Next\" is not this listing's next page", [e.away, e.error, e.next], [[], "", ""]);
     check("the brand's own \"Next page\" is pressed, and its page two read", [e.clicked, pieces(e.links).length], [["Next page"], 12]);
+
+    console.log("— F. \"See more\" as a button inside a link to another listing —");
+    const f = await walk(wrappedSeeMore, brand);
+    check("the button is that link's, and is not pressed", [f.away, f.at, f.error], [[], "/uk/shopping/men/gucci/items.aspx", ""]);
+    check("the brand's page two is next", [f.exhausted, f.next], [true, "/uk/shopping/men/gucci/items.aspx?page=2"]);
+
+    console.log("— G. a slider's \"Next\" button before the brand's \"Next page\" —");
+    const g = await walk(sliderArrow, brand);
+    check("the arrow pages nothing, so the brand's \"Next page\" is tried after it", [g.clicked, pieces(g.links).length, g.exhausted], [["Next", "Next page"], 12, true]);
+
+    console.log("— H. \"Show more\" whose router takes the tab to another listing in place —");
+    const h = await walk(routerAway, brand);
+    check("the walk sees it left", [h.left, h.at], [true, "/uk/shopping/men/designers/items.aspx"]);
+    check("and read the brand's six, none of what the other listing showed", pieces(h.links), Array.from({ length: 6 }, (_, i) => `/uk/shopping/men/gucci-${i + 1}-item-${10_000_001 + i}.aspx`));
+
+    console.log("— I. a Bitrix store's page two: ?PAGEN_1, \"Вперед\" —");
+    const i9 = await walk(bitrix, bitrixStart);
+    check("page three is its next page", [i9.exhausted, i9.next], [true, "/catalog/obuv/?PAGEN_1=3"]);
+
+    console.log("— J. pages in the path (/page-2/), in rel=next —");
+    const j = await walk(pathPager, pathStart);
+    check("page three is its next page", [j.exhausted, j.next], [true, "/catalog/shoes/page-3/"]);
     await browser.close();
   }
 
   // ── Where the walk may go ─────────────────────────────────────────────────
   console.log("— a page of the same listing, and anything else —");
-  const { sameListing = () => null } = await import(pathToFileURL(path.join(__dirname, "..", "extension", "listing.js")).href);
   const L = `${S}/uk/shopping/men/gucci/items.aspx`;
   check(
     "the listing's own pages are its: a query, a page number, /page/N",
@@ -239,6 +319,30 @@ const foreignNext = `<!doctype html><html><head><meta charset="utf-8">${css}</he
       sameListing(`${S}/shop?cat=coats&gclid=x`, `${S}/shop?page=2&cat=coats`),
     ],
     [true, true, true, true, true, true, true],
+  );
+  check(
+    "a store's own counter, page size or page token is no other listing",
+    [
+      sameListing(`${S}/catalog/obuv/?PAGEN_1=2`, `${S}/catalog/obuv/?PAGEN_1=3`),
+      sameListing(`${S}/men/shoes?start=24&sz=24`, `${S}/men/shoes?start=48&sz=24`),
+      sameListing(`${S}/c/dresses?offset=48`, `${S}/c/dresses?offset=96`),
+      sameListing(`${S}/collections/all?page=2&phcursor=A1`, `${S}/collections/all?page=3&phcursor=B2`),
+      sameListing(`${S}/s?k=dress&ref=nb_sb_noss`, `${S}/s?k=dress&page=2&ref=sr_pg_1`),
+    ],
+    [true, true, true, true, true],
+  );
+  check(
+    "pages in the path: /page-2/, /page=2/, /page_2, /Pageindex/2",
+    [
+      sameListing(`${S}/catalog/shoes/`, `${S}/catalog/shoes/page-2/`),
+      sameListing(`${S}/ua/krossovki/c4634997/`, `${S}/ua/krossovki/c4634997/page=2/`),
+      sameListing(`${S}/g123-dresses`, `${S}/g123-dresses/page_2`),
+      sameListing(`${S}/shop/dresses?id=5449`, `${S}/shop/dresses/Pageindex/2?id=5449`),
+      // …but not a word that ends in "page", or a product under the listing.
+      sameListing(`${S}/c/x`, `${S}/c/x/homepage2`),
+      sameListing(`${S}/women`, `${S}/women/p/123`),
+    ],
+    [true, true, true, true, false, false],
   );
   check(
     "another listing, another store, a product is not",
