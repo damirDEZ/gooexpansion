@@ -632,6 +632,26 @@ ${
 </body></html>`;
 }
 
+/**
+ * A brand's page of the `page` store: six jackets, and a "Show more" that is
+ * a button whose script takes the tab to another listing (Coats) — the way a
+ * store's "See more" goes on to similar designers. Nothing in the markup says
+ * so before the click.
+ */
+function trapPage() {
+  const cards = [1, 2, 3, 4, 5, 6]
+    .map((i) => `<div class="card"><a href="/product/jacket-${i}"><img alt="" src="/img/jacket-${i}-1.jpg"></a><a href="/product/jacket-${i}">Jacket ${i}</a></div>`)
+    .join("");
+  return `<!doctype html><html><head><title>Gucci</title>
+<style>body { margin: 0; font: 14px sans-serif; } .card { height: 320px; } .card img { width: 120px; height: 160px; }</style></head><body>
+<header><nav><a href="/">Home</a></nav></header>
+<main><h1>Gucci</h1><div id="grid">${cards}</div>
+<div id="more-wrap"><button type="button" id="more">Show more</button></div></main>
+<footer><a href="/help">Help</a></footer>
+<script>document.getElementById("more").addEventListener("click", () => { location.href = "/c/coats"; });</script>
+</body></html>`;
+}
+
 function categoryPage() {
   const shown =
     mode === "bigmap" ? products().filter((s) => !BIGMAP_SITEMAP_ONLY.includes(s) && !s.startsWith("secret")) : products();
@@ -699,6 +719,7 @@ const server = http.createServer((req, res) => {
   }
 
   if (mode === "page") {
+    if (p === "/c/gucci") return send(200, "text/html", trapPage());
     const listing = PAGE_LISTINGS[p];
     if (listing) return send(200, "text/html", listingPage(url.searchParams.get("page") === "2" ? 2 : 1, p, listing.dressed));
     if (p === "/api/cards") {
