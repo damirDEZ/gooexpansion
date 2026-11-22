@@ -78,9 +78,24 @@ console.log("— Scene7: the size asked for, not dropped —");
       "https://www.store.example/dw/image/v2/AAA_PRD/on/demandware.static/-/Sites/x/coat.jpg",
     ],
   );
+  check(
+    "the page's own fitting stays with its box, scaled up: without it Scene7 pads the box white",
+    [up("?wid=600&hei=800&fit=crop,1"), up("?wid=1000&hei=1000&fit=constrain"), up("?crop=0,0,2000,1000&wid=800&hei=400")],
+    ["?wid=1500&hei=2000&fit=crop,1", "?wid=2000&hei=2000&fit=constrain", "?crop=0,0,2000,1000&wid=2000&hei=1000"],
+  );
+  // The gallery upgrades an address, and the normaliser upgrades it again:
+  // a second pass dropped `fit=constrain` and the photo came back padded.
+  const twice = ["", "?$BBY_V3_SL_1$", "?$BBY_V3_SL_1$&wid=1501&hei=1500", "?$BBY_V3_SL_1$&wid=400", "?wid=600&hei=800&fit=crop,1", "?crop=0,0,2000,1000&wid=800&hei=400&qlt=80"];
+  check(
+    "upgraded twice is upgraded once",
+    twice.map((q) => upgradeImageUrl(upgradeImageUrl(B + q, page), page) === upgradeImageUrl(B + q, page)),
+    twice.map(() => true),
+  );
   check("every size of it is one photo", new Set(["", "?$BBY_V3_SL_1$", "?$BBY_V3_SL_1$&wid=1501&hei=1500"].map((q) => imageKey(B + q))).size, 1);
-  const kept = photosAfterNormalize([B, `${B}?$BBY_V3_SL_1$&wid=400&hei=400`, `${B}?$BBY_V3_SL_1$&wid=1501&hei=1500`], page);
-  check("og:image and the gallery's renditions: one photo, asked for at 2000", [kept.length, /wid=2000/.test(kept[0] || "")], [1, true]);
+  const kept = photosAfterNormalize([B], page);
+  check("og:image through the normaliser: fitted into 2000, its own proportions kept", kept, [`${B}?wid=2000&hei=2000&fit=constrain`]);
+  const both = photosAfterNormalize([B, `${B}?$BBY_V3_SL_1$&wid=400&hei=400`, `${B}?$BBY_V3_SL_1$&wid=1501&hei=1500`], page);
+  check("og:image and the gallery's renditions: one photo, asked for at 2000", [both.length, /wid=2000/.test(both[0] || "")], [1, true]);
 }
 
 console.log("— one photo, many addresses —");
