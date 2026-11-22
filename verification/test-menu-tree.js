@@ -39,6 +39,20 @@ function check(name, got, want) {
 }
 
 const S = "https://shop.example";
+/** Tom Ford's menu as folders: no customer service, no other country. */
+const TOM_FORD_TREE = [
+  "Men",
+  "Men › Ready to wear",
+  "Men › Ready to wear › Leather jackets",
+  "Men › Ready to wear › Suits & tuxedos",
+  "Men › Shoes",
+  "Men › Shoes › Sneakers",
+  "Men › Shoes › Loafers",
+  "Women",
+  "Women › Ready to wear",
+  "Women › Ready to wear › Dresses",
+  "Gifts",
+];
 
 (async () => {
   const site = await import(pathToFileURL(path.join(__dirname, "..", "extension", "site.js")).href);
@@ -573,6 +587,23 @@ const S = "https://shop.example";
       openedTree.includes("Women › Bags › Totes") && openedTree.includes("Bags › Collections") && !openedTree.includes("Bags › Totes"),
       true,
     );
+
+    console.log("— Tom Ford: a home on the bare domain, its menu under /en-us/ —");
+    const col = (head, base, items) =>
+      `<div class="mega-col"><a class="mega-col__title" href="${base}">${head}</a><ul>` +
+      items.map(([t, slug]) => `<li><a href="${base}${slug}/">${t}</a></li>`).join("") +
+      `</ul></div>`;
+    const tomFord = page$(`<header class="site-header"><nav class="main-menu" aria-label="Main"><ul class="menu-group">
+      <li class="menu-item"><a class="menu-link" href="/en-us/men/" aria-haspopup="true">Men</a>
+        <div class="mega-menu">${col("Ready to wear", "/en-us/men/ready-to-wear/", [["Leather jackets", "leather-jackets"], ["Suits &amp; tuxedos", "suits-tuxedos"]])}${col("Shoes", "/en-us/men/shoes/", [["Sneakers", "sneakers"], ["Loafers", "loafers"]])}</div></li>
+      <li class="menu-item"><a class="menu-link" href="/en-us/women/" aria-haspopup="true">Women</a>
+        <div class="mega-menu">${col("Ready to wear", "/en-us/women/ready-to-wear/", [["Dresses", "dresses"]])}</div></li>
+      <li class="menu-item"><a class="menu-link" href="/en-us/gifts/">Gifts</a></li>
+    </ul></nav></header>
+    <footer><ul><li><a href="/en-us/customer-service/">Customer service</a></li><li><a href="/en-gb/">United Kingdom</a></li><li><a href="/it-it/">Italia</a></li></ul></footer>`);
+    const tf = await read(tomFord);
+    const tfTree = menuGroups(categoryCandidates(tf.links, `${S}/`)).map((c) => categoryName(c));
+    check("the run started on the bare domain finds the menu's categories, in their folders", tfTree, TOM_FORD_TREE);
 
     console.log("— a big menu, read quickly —");
     const huge = [];
