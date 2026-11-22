@@ -94,6 +94,42 @@ const own = `<!doctype html><html><head><meta charset="utf-8">${css}</head><body
   });
 </script></body></html>`;
 
+// D. A brand's page whose "Similar designers" sits between the grid and the
+// pages, with a "See more" that is a link to another listing. Classes are
+// hashed, as Farfetch's are: nothing names the pages.
+const brand = `${S}/uk/shopping/men/gucci/items.aspx`;
+const similarFirst = `<!doctype html><html><head><meta charset="utf-8">${css}</head><body>
+<header><nav><a href="/uk/shopping/men/items.aspx">Men</a></nav></header>
+<main>
+  <h1>Gucci</h1>
+  <ul class="ltr-1a2b">${Array.from({ length: 6 }, (_, i) => card("gucci", i + 1)).join("")}</ul>
+  <div class="ltr-77"><h3>Similar designers</h3>
+    <ul class="ltr-55"><li><a href="/uk/shopping/men/prada/items.aspx">Prada</a></li><li><a href="/uk/shopping/men/fendi/items.aspx">Fendi</a></li></ul>
+    <a class="ltr-66" href="/uk/shopping/men/designers/items.aspx">See more</a></div>
+  <div class="ltr-9z8y"><a href="/uk/shopping/men/gucci/items.aspx">1</a> <a href="/uk/shopping/men/gucci/items.aspx?page=2">2</a>
+    <a class="ltr-q" aria-label="Next" href="/uk/shopping/men/gucci/items.aspx?page=2"><svg></svg></a></div>
+</main>
+<footer><a href="/help">Help</a></footer></body></html>`;
+
+// E. The listing pages itself with a "Next page" button, and a slider of
+// similar designers has a "Next" link to another listing's page two.
+const foreignNext = `<!doctype html><html><head><meta charset="utf-8">${css}</head><body>
+<header><nav><a href="/uk/shopping/men/items.aspx">Men</a></nav></header>
+<main>
+  <ul id="grid">${Array.from({ length: 6 }, (_, i) => card("gucci", i + 1)).join("")}</ul>
+  <div class="ltr-77"><h3>Similar designers</h3><ul><li><a href="/uk/shopping/men/prada/items.aspx">Prada</a></li></ul>
+    <a class="ltr-q" aria-label="Next" href="/uk/shopping/men/prada/items.aspx?page=2">›</a></div>
+  <div class="ltr-9z8y"><span id="where">1 / 2</span> <button type="button" id="next" aria-label="Next page"><svg></svg></button></div>
+</main>
+<footer><a href="/help">Help</a></footer>
+<script>
+  document.getElementById("next").addEventListener("click", (e) => {
+    document.getElementById("grid").innerHTML = ${JSON.stringify(Array.from({ length: 6 }, (_, i) => card("gucci", i + 7)).join(""))};
+    history.pushState({}, "", "?page=2");
+    e.currentTarget.disabled = true;
+  });
+</script></body></html>`;
+
 (async () => {
   const { listingStep } = await import(pathToFileURL(path.join(__dirname, "..", "extension", "listing.js")).href);
   const playwright = (() => {
@@ -110,23 +146,46 @@ const own = `<!doctype html><html><head><meta charset="utf-8">${css}</head><body
       executablePath: process.env.CHROME_PATH || "/opt/pw-browsers/chromium-1194/chrome-linux/chrome",
     });
     const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
-    /** Walk a page to its end as the worker does; the links it read, in order, and how it ended. */
-    const walk = async (html) => {
-      await page.route(`${S}/**`, (route) => route.fulfill({ status: 200, contentType: "text/html; charset=utf-8", body: html }));
-      await page.goto(START);
-      await page.unroute(`${S}/**`);
+    /**
+     * Walk a page to its end as the worker does; the links it read, in order,
+     * how it ended, and every page the tab was taken to on the way.
+     */
+    const walk = async (html, start = START) => {
+      const served = [];
+      await page.route(`${S}/**`, (route) => {
+        served.push(new URL(route.request().url()).pathname);
+        route.fulfill({ status: 200, contentType: "text/html; charset=utf-8", body: html });
+      });
+      await page.goto(start);
       const links = [];
       const clicked = [];
       let res = null;
+      let error = "";
       for (let i = 0; i < 40; i++) {
         const opts = { first: i === 0, reset: i === 0, stepMs: 60, settleMs: 400, clickWaitMs: 900 };
-        res = await page.evaluate(`(${listingStep.toString()})(${JSON.stringify(opts)})`);
+        try {
+          res = await page.evaluate(`(${listingStep.toString()})(${JSON.stringify(opts)})`);
+        } catch (err) {
+          error = String(err.message || err).split("\n")[0];
+          break;
+        }
         links.push(...res.links.map((u) => new URL(u).pathname));
         if (res.clicked) clicked.push(res.clicked);
         if (res.exhausted) break;
       }
-      const more = await page.evaluate(() => window.__more);
-      return { links: [...new Set(links)], clicked, next: res && res.next ? new URL(res.next).pathname + new URL(res.next).search : "", exhausted: !!(res && res.exhausted), more };
+      await page.waitForTimeout(300);
+      await page.unroute(`${S}/**`);
+      const more = await page.evaluate(() => window.__more).catch(() => null);
+      return {
+        links: [...new Set(links)],
+        clicked,
+        next: res && res.next ? new URL(res.next).pathname + new URL(res.next).search : "",
+        exhausted: !!(res && res.exhausted),
+        more,
+        at: new URL(page.url()).pathname,
+        away: served.slice(1),
+        error,
+      };
     };
     const pieces = (links) => links.filter((p) => /-item-\d+\.aspx$/.test(p));
 
@@ -149,8 +208,50 @@ const own = `<!doctype html><html><head><meta charset="utf-8">${css}</head><body
     const c = await walk(own);
     check("the grid's \"Show more\" is still pressed, and what it loads is read", [c.more, c.clicked, pieces(c.links).length], [1, ["Show more"], 10]);
     check("then page two, from the pages' own \"Next\"", c.next, "/uk/shopping/men/items.aspx?page=2");
+
+    console.log("— D. a brand's page: \"Similar designers\" between the grid and its pages —");
+    const d = await walk(similarFirst, brand);
+    check("the tab never leaves the brand: \"See more\" to another listing is not the grid's", [d.away, d.at, d.error], [[], "/uk/shopping/men/gucci/items.aspx", ""]);
+    check("the brand's six pieces are read", pieces(d.links).length, 6);
+    check("and the next page is the brand's own page two", [d.exhausted, d.next], [true, "/uk/shopping/men/gucci/items.aspx?page=2"]);
+
+    console.log("— E. a \"Next\" to another listing's page two, the brand's \"Next page\" a button —");
+    const e = await walk(foreignNext, brand);
+    check("the other listing's \"Next\" is not this listing's next page", [e.away, e.error, e.next], [[], "", ""]);
+    check("the brand's own \"Next page\" is pressed, and its page two read", [e.clicked, pieces(e.links).length], [["Next page"], 12]);
     await browser.close();
   }
+
+  // ── Where the walk may go ─────────────────────────────────────────────────
+  console.log("— a page of the same listing, and anything else —");
+  const { sameListing = () => null } = await import(pathToFileURL(path.join(__dirname, "..", "extension", "listing.js")).href);
+  const L = `${S}/uk/shopping/men/gucci/items.aspx`;
+  check(
+    "the listing's own pages are its: a query, a page number, /page/N",
+    [
+      sameListing(L, `${L}?page=2`),
+      sameListing(L, `${L}?view=96&page=3`),
+      sameListing(`${S}/c/jackets`, `${S}/c/jackets/page/2`),
+      sameListing(`${S}/c/jackets/page/2`, `${S}/c/jackets/page/3`),
+      sameListing(`${S}/c/jackets/`, `${S}/c/jackets?p=2`),
+      // The tab arrived with a tag its pager's links do not carry.
+      sameListing(`${S}/c/jackets?srsltid=AfmBOo&utm_source=google`, `${S}/c/jackets?page=2`),
+      sameListing(`${S}/shop?cat=coats&gclid=x`, `${S}/shop?page=2&cat=coats`),
+    ],
+    [true, true, true, true, true, true, true],
+  );
+  check(
+    "another listing, another store, a product is not",
+    [
+      sameListing(L, `${S}/uk/shopping/men/prada/items.aspx?page=2`),
+      sameListing(L, `${S}/uk/shopping/men/designers/items.aspx`),
+      sameListing(L, `https://other.example/uk/shopping/men/gucci/items.aspx?page=2`),
+      sameListing(`${S}/c/jackets`, `${S}/c/jackets-sale`),
+      sameListing(`${S}/shop?cat=coats`, `${S}/shop?cat=bags&page=2`),
+      sameListing(L, "not a url"),
+    ],
+    [false, false, false, false, false, false],
+  );
 
   console.log("");
   for (const f of failures) console.log(`  ✗ ${f}`);

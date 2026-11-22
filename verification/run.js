@@ -1092,6 +1092,45 @@ async function main() {
     check("nor page two opened", !logM2.some((l) => l.path === "/c/jackets" && l.search === "?page=2"));
   }
   popup.close();
+
+  // ── Run L2: a "Show more" whose script takes the tab to another listing ───
+  //
+  // Farfetch (1.5.2): the walk pressed a "See more" under a brand's grid and
+  // went on reading the similar designers it led to. The brand's page here
+  // has a "Show more" that is a button, its script sending the tab to Coats:
+  // nothing to tell before the click. The walk must stop where the tab left
+  // the brand, read nothing of Coats, and bring the tab back.
+  console.log("\n— run L2: a \"Show more\" that takes the tab to another listing —");
+  await storeControl({ mode: "page", reset: true });
+  await studioReset();
+  const GUCCI = `${STORE}/c/gucci`;
+  const gucciTarget = await newTab(GUCCI);
+  await sleep(1500);
+  {
+    const p = await openPopup(extId);
+    const tab = await p.evaluate(
+      `chrome.tabs.query({}).then((ts) => ts.filter((t) => (t.url || "").startsWith(${JSON.stringify(GUCCI)})).map((t) => ({ id: t.id, url: t.url }))[0])`,
+    );
+    await p.evaluate(
+      `(async () => { const t = ${JSON.stringify(tab)}; chrome.tabs.query = async () => [t]; chrome.permissions.request = (q) => chrome.permissions.contains(q); await init(); if (!document.getElementById("all").checked) document.getElementById("all").click(); })()`,
+    );
+    await p.evaluate(`document.getElementById("start").click()`, { userGesture: true });
+    await sleep(300);
+    await activate(gucciTarget.id);
+    const st = await untilEnded(p, 180);
+    const logL2 = (await storeLog()).log;
+    const opened = [...new Set(logL2.filter((l) => /^\/product\/jacket-\d+$/.test(l.path)).map((l) => l.path))];
+    check("run L2 finished", !!st && st.phase === "done", JSON.stringify(st && { phase: st.phase, message: st.message }));
+    check(
+      "it collected the brand's six and nothing of the listing the button led to",
+      JSON.stringify(opened.sort()) === JSON.stringify([1, 2, 3, 4, 5, 6].map((i) => `/product/jacket-${i}`).sort()),
+      JSON.stringify(opened),
+    );
+    check("and said why the walk stopped there", !!st && /another listing/.test(st.message || ""), st && st.message);
+    check("the tab is back on the brand", (await targetUrl(gucciTarget.id)) === GUCCI, await targetUrl(gucciTarget.id));
+    p.close();
+  }
+  await fetch(`http://127.0.0.1:${PORT}/json/close/${gucciTarget.id}`);
   collect.close();
   await fetch(`http://127.0.0.1:${PORT}/json/close/${storeTarget.id}`);
 
