@@ -18,7 +18,7 @@ Module._resolveFilename = function (request, ...rest) {
 };
 
 const PARSER = path.join(COMPILED, "lib", "server", "parser");
-const { imageKey, harvestGalleryImages } = require(path.join(PARSER, "gallery.js"));
+const { imageKey, harvestGalleryImages, upgradeImageUrl } = require(path.join(PARSER, "gallery.js"));
 const { normalizeExtract } = require(path.join(PARSER, "normalize.js"));
 const { mergeShopifyIntoRaw } = require(path.join(PARSER, "shopify.js"));
 
@@ -34,6 +34,53 @@ const check = (name, actual, expected) => {
 /** How many distinct photos a list holds, after the product's own dedupe. */
 function photosAfterNormalize(images, sourceUrl) {
   return normalizeExtract({ name: "Piece", images, strategies: [] }, sourceUrl, null).images;
+}
+
+console.log("— Scene7: the size asked for, not dropped —");
+{
+  // Burberry, 2026-11-22: every photo on the site came out soft. Its og:image
+  // has no query and the parser dropped the size off the gallery's addresses,
+  // as on other CDNs, where that is the original. On Scene7 it is the default
+  // rendition: measured 356×400 bare, 500×500 with the preset only, while the
+  // page asks for 1501×1500 and the photo is 4200×4725.
+  const B = "https://assets.burberry.com/is/image/Burberryltd/492B8282-9F96-48F6-99BA-2DFCB20F2951";
+  const page = "https://int.burberry.com/slim-jeans-p81368121";
+  const up = (q) => upgradeImageUrl(B + q, page).replace(B, "");
+  check("a bare address: fitted into 2000 both ways, its own proportions", up(""), "?wid=2000&hei=2000&fit=constrain");
+  check("the preset alone: the same, the preset kept first", up("?$BBY_V3_SL_1$"), "?$BBY_V3_SL_1$&wid=2000&hei=2000&fit=constrain");
+  check("the page's own box, scaled up to 2000 on its long side", up("?$BBY_V3_SL_1$&wid=1501&hei=1500"), "?$BBY_V3_SL_1$&wid=2000&hei=1999");
+  check("a box already bigger is left as big", up("?$BBY_V3_SL_1$&wid=2500&hei=2500"), "?$BBY_V3_SL_1$&wid=2500&hei=2500");
+  check("a width alone (the preset's height would box it: 2000×500) is fitted both ways", up("?$BBY_V3_SL_1$&wid=400"), "?$BBY_V3_SL_1$&wid=2000&hei=2000&fit=constrain");
+  check(
+    "quality and scale go, a format stays; a 3:4 box stays 3:4",
+    up("?$pdp$&qlt=80&wid=300&hei=400&scl=2&fmt=jpeg"),
+    "?$pdp$&fmt=jpeg&wid=1500&hei=2000",
+  );
+  check(
+    "other Scene7 hosts too (Timberland, s7d)",
+    [
+      upgradeImageUrl("https://images.timberland.com/is/image/timberland/A2G8B-hero?wid=480&hei=480", "https://www.timberland.com/"),
+      upgradeImageUrl("https://s7d1.scene7.com/is/image/Store/SKU_1?$pdp$", "https://www.store.example/"),
+    ],
+    [
+      "https://images.timberland.com/is/image/timberland/A2G8B-hero?wid=2000&hei=2000",
+      "https://s7d1.scene7.com/is/image/Store/SKU_1?$pdp$&wid=2000&hei=2000&fit=constrain",
+    ],
+  );
+  check(
+    "elsewhere a size is still dropped: Shopify, Demandware",
+    [
+      upgradeImageUrl("https://cdn.shopify.com/s/files/1/0001/files/coat.jpg?width=300&v=2", "https://shop.example/"),
+      upgradeImageUrl("https://www.store.example/dw/image/v2/AAA_PRD/on/demandware.static/-/Sites/x/coat.jpg?sw=300&sh=400", "https://www.store.example/"),
+    ],
+    [
+      "https://cdn.shopify.com/s/files/1/0001/files/coat.jpg?v=2",
+      "https://www.store.example/dw/image/v2/AAA_PRD/on/demandware.static/-/Sites/x/coat.jpg",
+    ],
+  );
+  check("every size of it is one photo", new Set(["", "?$BBY_V3_SL_1$", "?$BBY_V3_SL_1$&wid=1501&hei=1500"].map((q) => imageKey(B + q))).size, 1);
+  const kept = photosAfterNormalize([B, `${B}?$BBY_V3_SL_1$&wid=400&hei=400`, `${B}?$BBY_V3_SL_1$&wid=1501&hei=1500`], page);
+  check("og:image and the gallery's renditions: one photo, asked for at 2000", [kept.length, /wid=2000/.test(kept[0] || "")], [1, true]);
 }
 
 console.log("— one photo, many addresses —");
