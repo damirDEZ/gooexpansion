@@ -1520,14 +1520,21 @@ async function main() {
       JSON.stringify(ingested.slice(-7)),
     );
     // The wait shows as the gap between opening a category and the next request.
-    // robots.txt is read again when the list's "Collect" starts the walk: the
-    // wait comes after that one.
-    const after = (pathname) => {
-      const i = pathname === "/robots.txt" ? logW2.findLastIndex((l) => l.path === pathname) : logW2.findIndex((l) => l.path === pathname && !l.search);
-      const next = logW2.slice(i + 1).find((l) => !/^\/(?:img|cdn)\/|^\/(?:style\.css|frame)$/.test(l.path));
-      return i >= 0 && next ? next.at - logW2[i].at : -1;
+    const asset = (l) => /^\/(?:img|cdn)\/|^\/(?:style\.css|frame)$/.test(l.path);
+    const gapAfter = (i) => {
+      const next = i >= 0 ? logW2.slice(i + 1).find((l) => !asset(l)) : null;
+      return next ? next.at - logW2[i].at : -1;
     };
-    const waits = { home: after("/robots.txt"), knitwear: after("/c/knitwear"), sale: after("/c/sale") };
+    const after = (pathname) => gapAfter(logW2.findIndex((l) => l.path === pathname && !l.search));
+    // The walk starts at the list's "Collect": robots.txt read again, the
+    // start page opened again, and then the wait for the tab.
+    const startedAt = () => {
+      let i = logW2.findLastIndex((l) => l.path === "/robots.txt");
+      const next = i >= 0 ? logW2.slice(i + 1).find((l) => !asset(l)) : null;
+      if (next && next.path === "/") i = logW2.indexOf(next);
+      return i;
+    };
+    const waits = { home: gapAfter(startedAt()), knitwear: after("/c/knitwear"), sale: after("/c/sale") };
     check(
       "it waited a minute for the tab at the first category, then only seconds at the next ones",
       waits.home >= 55_000 && waits.knitwear >= 0 && waits.knitwear < 15_000 && waits.sale >= 0 && waits.sale < 15_000,
@@ -1645,7 +1652,7 @@ async function main() {
     const b = await buttons(popup);
     const rule = await popup.evaluate(`document.getElementById("rule").value`);
     const skippedLine = await popup.evaluate(`document.getElementById("aiSkipped").hidden ? "" : document.getElementById("aiSkipped").textContent`);
-    check("the popup says AI chose 3 categories and left out 2, and shows the rule again", /AI chose \(2 left out\)|3 categories AI chose \(2 left out\)/.test(b.found) && /10 new/.test(b.counts) && rule === "Coats and sale only", JSON.stringify({ b, rule }));
+    check("the popup says AI chose 2 categories and left out 2, and shows the rule again", /this page and the 2 categories AI chose \(2 left out\)/.test(b.found) && /10 new/.test(b.counts) && rule === "Coats and sale only", JSON.stringify({ b, rule }));
     check("and how many pieces AI skipped", skippedLine === "AI skipped 10 pieces that don't fit the rule", skippedLine);
     popup.close();
   }
@@ -1676,7 +1683,8 @@ async function main() {
     );
     check(
       "the popup shows it as a warning, and says the pieces will not be checked by name",
-      !!list && /^AI could not choose \(429 Rate limit/.test(list.note) && /pieces will not be checked by name/.test(list.note),
+      !!list && /^AI could not choose \(429 Rate limit/.test(list.note) && /pieces will not be checked by name/.test(list.note) &&
+        list.hint === "Without AI, every piece in the ticked categories is opened, and the store's sitemaps are not read.",
       list && list.note,
     );
     await popup.evaluate(`document.getElementById("pickCancel").click()`);
@@ -1880,7 +1888,7 @@ async function main() {
     check("the categories walked: this page and the three ticked", !!w.saved && JSON.stringify(w.saved.categories.map((c) => c.label)) === JSON.stringify(["This page", "Women's shoes", "Men's shoes", "New in"]), JSON.stringify(w.saved && w.saved.categories.map((c) => c.label)));
     check("every piece they show, and nothing of Dresses' or Kids' own: 9", JSON.stringify(w.ingested) === JSON.stringify(walked), JSON.stringify(w.ingested));
     check("Dresses and Kids were never opened, nor the sitemap read", !w.log.some((l) => l.path === "/c/dresses" || l.path === "/c/kids" || /sitemap/.test(l.path)), JSON.stringify(w.log.filter((l) => l.path === "/c/dresses" || l.path === "/c/kids" || /sitemap/.test(l.path))));
-    check("the popup says what was walked", /Whole store: the 4 categories ticked \(2 left out\)/.test(w.shown.found) && w.shown.skipped === "", JSON.stringify(w.shown));
+    check("the popup says what was walked", /Whole store: this page and the 3 categories ticked \(2 left out\)/.test(w.shown.found) && w.shown.skipped === "", JSON.stringify(w.shown));
     await fetch(`http://127.0.0.1:${PORT}/json/close/${w.tab.id}`);
   }
   collect.close();

@@ -107,6 +107,7 @@ const S = "https://shop.example";
   // the start page's "no language", the run found no category at all.
   const bare = `${S}/`;
   const tomFord = [
+    { url: `${S}/en-us/`, label: "Tom Ford", where: "menu" },
     { url: `${S}/en-us/men/`, label: "Men", where: "menu" },
     { url: `${S}/en-us/women/`, label: "Women", where: "menu" },
     { url: `${S}/en-us/men/ready-to-wear/leather-jackets/`, label: "Leather jackets", where: "menu", trail: ["Men", "Ready to wear"] },
@@ -115,10 +116,11 @@ const S = "https://shop.example";
     { url: `${S}/en-us/customer-service/`, label: "Customer service", where: "footer" },
     { url: `${S}/en-gb/`, label: "United Kingdom", where: "footer" },
     { url: `${S}/it-it/`, label: "Italia", where: "footer" },
+    { url: `${S}/en-us/?utm_source=footer`, label: "United States", where: "footer" },
   ];
   check("a bare-domain home takes the language its menu speaks", site.storeLocale(tomFord, bare), "/en-us");
   check(
-    "and its menu's categories are the run's, not the other countries in the footer",
+    "and its menu's categories are the run's: not the other countries in the footer, nor the logo's /en-us/ home",
     site.categoryCandidates(tomFord, bare).map((c) => c.url.replace(S, "")),
     ["/en-us/men/", "/en-us/women/", "/en-us/men/ready-to-wear/leather-jackets/", "/en-us/men/shoes/sneakers/", "/en-us/gifts/"],
   );
@@ -138,6 +140,7 @@ const S = "https://shop.example";
     "/en-us",
   );
   check("a link's language as asked for", site.categoryAddress("/en-us/men/", bare, "/en-us"), `${S}/en-us/men/`);
+  check("and the home page in that language is no category", [site.categoryAddress("/en-us/", bare, "/en-us"), site.categoryAddress("/ua/en/", `${S}/ua/en/men/`)], ["", ""]);
 
   // ── The menu as a list of categories ───────────────────────────────────────
   const links = [
